@@ -3,6 +3,9 @@ Robotic browser.
 """
 
 import re
+import os
+import base64
+import pickle
 import requests
 from bs4 import BeautifulSoup
 from werkzeug.utils import cached_property
@@ -41,7 +44,7 @@ class RoboState(object):
         )
 
 
-class RoboBrowser(object):
+class RoboBrowser:
     """Robotic web browser. Represents HTTP requests and responses using the
     requests library and parsed HTML using BeautifulSoup.
 
@@ -64,9 +67,10 @@ class RoboBrowser(object):
     :param int multiplier: Delay multiplier between retries
 
     """
-    def __init__(self, session=None, parser=None, user_agent=None,
+    def __init__(self, *, session=None, parser=None, user_agent=None,
                  history=True, timeout=None, allow_redirects=True, cache=False,
                  cache_patterns=None, max_age=None, max_count=None, tries=None,
+                 send_referer=True,
                  multiplier=None):
 
         self.session = session or requests.Session()
@@ -75,10 +79,12 @@ class RoboBrowser(object):
         if user_agent is not None:
             self.session.headers['User-Agent'] = user_agent
 
-        self.parser = parser
+        self.parser = parser or 'lxml'
 
         self.timeout = timeout
         self.allow_redirects = allow_redirects
+        self.send_referer = send_referer
+        self.simple_cookie = None
 
         # Set up caching
         if cache:
@@ -334,6 +340,10 @@ class RoboBrowser(object):
         # Get HTTP verb
         method = form.method.upper()
 
+        if self.url and self.send_referer:
+            kwargs.setdefault('headers', {})
+            kwargs['headers'].setdefault('Referer', self.url)
+
         # Send request
         url = self._build_url(form.action) or self.url
         payload = form.serialize(submit=submit)
@@ -345,3 +355,163 @@ class RoboBrowser(object):
         # Update history
         self._update_state(response)
 
+    # Nexus methods
+    def get_cookies(self):
+        """
+        :return: http.cookiejar.Cookie list
+        For serialize, example django cache
+        """
+        return list(iter(self.session.cookies))
+
+    def get_serialized_cookies(self):
+        b = pickle.dumps(self.get_cookies())
+        return base64.b64encode(b).decode()
+
+    def save_cookies_to_file(self, file_path):
+        """
+        Save pickled cookies to file
+        """
+        with open(file_path, 'wb') as fp:
+            pickle.dump(self.get_cookies(), fp)
+
+    def set_cookies(self, cookies):
+        """
+        From serialized, example django cache
+        """
+        for cookie in cookies:
+            self.session.cookies.set_cookie(cookie)
+
+    def set_serialized_cookies(self, text):
+        b = base64.b64decode(text)
+        cookies = pickle.loads(b)
+        self.set_cookies(cookies)
+
+    def load_cookies_from_file(self, file_path, fail_silently=True):
+        """
+        Load unpickled cookies to file
+        """
+        if not os.path.exists(file_path) and fail_silently:
+            return
+        with open(file_path, 'rb') as fp:
+            cookies = pickle.load(fp)
+            self.set_cookies(cookies)
+
+    def get_cookies_as_dicts(self):
+        """
+        Get cookies for debug
+        """
+        return [c.__dict__ for c in iter(self.session.cookies)]
+
+    def get_cookie_values_as_dicts(self):
+        """
+        Get cookies for eazy debug.
+        """
+        return [
+            {
+                "domain": c.domain,
+                "name": c.name,
+                "value": c.value,
+            } for c in iter(self.session.cookies)
+        ]
+
+    def preview(self, suffix='.html'):
+        """
+        Preview latest response with GUI web browser
+        """
+        import tempfile
+        import subprocess
+
+        f = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+        f.write(self.state.response.content)
+        f.close()
+
+        # for mac.
+        subprocess.Popen(['open', f.name])
+        # Auto delete required?
+
+    def get_decoded_content(self):
+        """
+        Get html content as str
+        """
+        return self.response.text
+
+    def take_snapshot(self, file_path):
+        """
+        take html snapshot to file
+        """
+        with open(file_path, "wb") as fp:
+            fp.write(self.state.response.content)
+
+    re_meta_refresh_content_url = re.compile(r'url=(.+)', re.I)
+
+    re_http_equiv_refresh = re.compile("^refresh$", re.I)
+
+    def meta_refresh(self):
+        """
+        Execute meta refresh.
+        """
+        meta_refresh = self.find(
+            'meta', attrs={'http-equiv': self.re_http_equiv_refresh})
+        if not meta_refresh:
+            return
+
+        content = meta_refresh['content']
+        if not content:
+            return
+
+        match = self.re_meta_refresh_content_url.search(content)
+        if not match:
+            return
+
+        self.open(match.group(1))
+
+    def load_html(self, html, **kwargs):
+        """
+        Load html force. Overwrite on current state.
+        """
+        kwargs.setdefault('features', 'lxml')
+        parsed = BeautifulSoup(html, **kwargs)
+        self.state.parsed = parsed
+
+    def get_parsed_url(self):
+        """
+        Get parsed current url.
+        """
+        return urlparse.urlparse(self.url)
+
+    def get_parsed_query(self, flatten=True, *kwargs):
+        """
+        Get parsed current url queries
+        """
+        parsed_url = self.get_parsed_url()
+        qs = urlparse.parse_qs(parsed_url.query, *kwargs)
+        if not flatten:
+            return qs
+        return {
+            k: v if len(v) >= 2 else v[0]
+            for k, v in qs.items()
+        }
+
+    def reparse(self, decode=True, encoding=None, errors='ignore'):
+        """
+        Retry parse content for beautifulsoup
+        """
+        from bs4 import BeautifulSoup
+        if decode:
+            if encoding:
+                content = self.state.response.content.decode(
+                    encoding, errors=errors)
+            else:
+                content = self.state.response.content.decode(
+                    errors=errors)
+        else:
+            content = self.state.response.content
+        self.state.parsed = BeautifulSoup(content, features=self.parser)
+
+    def header_encoding(self):
+        match = re.search(
+            'charset=(.+)',
+            self.response.headers.get('Content-Type', ''),
+            re.IGNORECASE)
+        if match:
+            return match.group(1).lower()
