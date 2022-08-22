@@ -13,7 +13,7 @@ from robobrowser.compat import string_types, iteritems
 def match_text(text, tag):
     if isinstance(text, string_types):
         return text in tag.text
-    if isinstance(text, re._pattern_type):
+    if isinstance(text, re.Pattern):
         return text.search(tag.text)
 
 
