@@ -8,7 +8,10 @@ import base64
 import pickle
 import requests
 from bs4 import BeautifulSoup
-from werkzeug.utils import cached_property
+try:
+    from functools import cached_property
+except ImportError:
+    from werkzeug.utils import cached_property
 from requests.packages.urllib3.util.retry import Retry
 
 from robobrowser import helpers
@@ -22,7 +25,7 @@ _link_ptn = re.compile(r'^(a|button)$', re.I)
 _form_ptn = re.compile(r'^form$', re.I)
 
 
-class RoboState(object):
+class RoboState:
     """Representation of a browser state. Wraps the browser and response, and
     lazily parses the response content.
 
