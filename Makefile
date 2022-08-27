@@ -27,7 +27,7 @@ lint:
 	flake8 robobrowser tests
 
 test:
-	python setup.py test
+	python3 setup.py test
 
 test-all:
 	tox
@@ -47,8 +47,9 @@ docs:
 	open docs/_build/html/index.html
 
 release: clean
-	python setup.py sdist upload
+	python3 setup.py sdist
+	twine upload dist/*
 
 sdist: clean
-	python setup.py sdist
+	python3 setup.py sdist
 	ls -l dist
