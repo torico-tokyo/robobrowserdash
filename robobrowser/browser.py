@@ -358,7 +358,7 @@ class RoboBrowser:
         # Update history
         self._update_state(response)
 
-    # Nexus methods
+    # Dash extra methods
     def get_cookies(self):
         """
         :return: http.cookiejar.Cookie list

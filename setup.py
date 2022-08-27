@@ -48,7 +48,7 @@ def find_version(fname):
 
 
 setup(
-    name='robobrowsernexus',
+    name='robobrowserdash',
     version=find_version('robobrowser/__init__.py'),
     description='[Robobrowser Fork] Your friendly neighborhood web scraper',
     author='Joshua Carp',
