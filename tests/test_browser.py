@@ -1,5 +1,6 @@
-import mock
+import aiohttp
 import unittest
+from unittest import mock
 from nose.tools import *  # noqa
 
 import re
@@ -26,6 +27,18 @@ class TestHeaders(unittest.TestCase):
     def test_default_headers(self):
         browser = RoboBrowser()
         assert_equal(browser.session.headers, requests.Session().headers)
+
+
+class TestAsyncHeaders(unittest.IsolatedAsyncioTestCase):
+    @mock_links
+    async def test_user_agent(self):
+        async with aiohttp.ClientSession() as client:
+            browser = RoboBrowser(session=client, user_agent='freddie')
+            await browser.aopen('http://robobrowser.com/links/')
+        assert_true('User-Agent' in browser.session.headers)
+        assert_equal(
+            browser.session.headers['User-Agent'], 'freddie'
+        )
 
 
 class TestOpen(unittest.TestCase):
@@ -80,6 +93,39 @@ class TestLinks(unittest.TestCase):
             exceptions.RoboError,
             lambda: self.browser.follow_link(link)
         )
+
+
+# class TestAsyncLinks(unittest.IsolatedAsyncioTestCase):
+#
+#     @mock_links
+#     async def asyncSetUp(self):
+#         async with aiohttp.ClientSession() as client:
+#             self.browser = RoboBrowser(session=client)
+#             await self.browser.aopen('http://robobrowser.com/links/')
+#
+#     @mock_links
+#     def test_get_link(self):
+#         link = self.browser.get_link()
+#         assert_equal(link.get('href'), '/link1/')
+#
+#     @mock_links
+#     async def test_get_links(self):
+#         links = self.browser.get_links()
+#         assert_equal(len(links), 3)
+#
+#     @mock_links
+#     async def test_follow_link_tag(self):
+#         link = self.browser.get_link(text=re.compile('sheer'))
+#         self.browser.follow_link(link)
+#         assert_equal(self.browser.url, 'http://robobrowser.com/link1/')
+#
+#     @mock_links
+#     async def test_follow_link_no_href(self):
+#         link = BeautifulSoup('<a>nohref</a>').find('a')
+#         assert_raises(
+#             exceptions.RoboError,
+#             lambda: self.browser.follow_link(link)
+#         )
 
 
 class TestForms(unittest.TestCase):

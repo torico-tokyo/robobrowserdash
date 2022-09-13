@@ -7,6 +7,7 @@ import os
 import base64
 import pickle
 import requests
+import inspect
 from bs4 import BeautifulSoup
 try:
     from functools import cached_property
@@ -182,6 +183,9 @@ class RoboBrowser:
             url
         )
 
+    def set_proxy(self, proxies):
+        self.session.proxies = proxies
+
     @property
     def _default_send_args(self):
         """
@@ -213,6 +217,18 @@ class RoboBrowser:
         """
         response = self.session.request(method, url, **self._build_send_args(**kwargs))
         self._update_state(response)
+
+    async def aopen(self, url, method='get', **kwargs):
+        """Open a URL as asynchronously.
+        e.g
+        with aiohttp.ClientSession() as client:
+            browser = RoboBrowser(session=client)
+            await browser.aopen(url)
+        """
+        async with getattr(self.session, method)(url, **self._build_send_args(**kwargs)) as resp:
+            content = await resp.read()
+        resp.content = content
+        self._update_state(resp)
 
     def _update_state(self, response):
         """Update the state of the browser. Create a new state object, and
