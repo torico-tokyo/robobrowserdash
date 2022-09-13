@@ -217,7 +217,7 @@ class RoboBrowser:
         response = self.session.request(method, url, **self._build_send_args(**kwargs))
         self._update_state(response)
 
-    async def aopen(self, url, method='get', **kwargs):
+    async def aopen(self, url, method='get', encoding=None, **kwargs):
         """Open a URL as asynchronously.
         e.g
         with aiohttp.ClientSession() as client:
@@ -229,7 +229,9 @@ class RoboBrowser:
 
         async with getattr(self.session, method)(url, **self._build_send_args(**kwargs)) as resp:
             content = await resp.read()
+            text = await resp.text(encoding)
         resp.content = content
+        resp.text = text
         self._update_state(resp)
 
     def _update_state(self, response):
