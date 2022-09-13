@@ -305,6 +305,54 @@ class TestHistory(unittest.TestCase):
         )
 
 
+class TestAsyncHistory(unittest.IsolatedAsyncioTestCase):
+
+    @mock_urls
+    async def asyncSetUp(self):
+        async with aiohttp.ClientSession() as client:
+            self.browser = RoboBrowser(session=client, history=True)
+            await self.browser.aopen('http://robobrowser.com/page1/')
+            await self.browser.aopen('http://robobrowser.com/page2/')
+            await self.browser.aopen('http://robobrowser.com/page3/')
+
+    def test_back(self):
+        self.browser.back()
+        assert_equal(
+            self.browser.url,
+            'http://robobrowser.com/page2/'
+        )
+
+    def test_back_n(self):
+        self.browser.back(n=2)
+        assert_equal(
+            self.browser.url,
+            'http://robobrowser.com/page1/'
+        )
+
+    def test_forward(self):
+        self.browser.back()
+        self.browser.forward()
+        assert_equal(
+            self.browser.url,
+            'http://robobrowser.com/page3/'
+        )
+
+    def test_forward_n(self):
+        self.browser.back(n=2)
+        self.browser.forward(n=2)
+        assert_equal(
+            self.browser.url,
+            'http://robobrowser.com/page3/'
+        )
+
+    def test_back_error(self):
+        assert_raises(
+            exceptions.RoboError,
+            self.browser.back,
+            5
+        )
+
+
 class TestCustomSession(unittest.TestCase):
 
     @mock_links

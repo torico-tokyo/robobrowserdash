@@ -7,7 +7,6 @@ import os
 import base64
 import pickle
 import requests
-import inspect
 from bs4 import BeautifulSoup
 try:
     from functools import cached_property
@@ -35,7 +34,7 @@ class RoboState:
     def __init__(self, browser, response):
         self.browser = browser
         self.response = response
-        self.url = response.url
+        self.url = response.url if isinstance(response.url, str) else str(response.url)
 
     @cached_property
     def parsed(self):
@@ -225,6 +224,9 @@ class RoboBrowser:
             browser = RoboBrowser(session=client)
             await browser.aopen(url)
         """
+        if self.session.closed:
+            raise Exception('session is already closed')
+
         async with getattr(self.session, method)(url, **self._build_send_args(**kwargs)) as resp:
             content = await resp.read()
         resp.content = content
