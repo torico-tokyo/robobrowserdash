@@ -6,6 +6,8 @@ import re
 import os
 import base64
 import pickle
+
+import aiohttp
 import requests
 from bs4 import BeautifulSoup
 try:
@@ -75,7 +77,6 @@ class RoboBrowser:
                  cache_patterns=None, max_age=None, max_count=None, tries=None,
                  send_referer=True,
                  multiplier=None):
-
         self.session = session or requests.Session()
 
         # Add default user agent string
@@ -124,6 +125,21 @@ class RoboBrowser:
             return '<RoboBrowser url={0}>'.format(self.url)
         except exceptions.RoboError:
             return '<RoboBrowser>'
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.session.close()
+
+    @classmethod
+    def acreate(cls, session=None, **kwargs) -> 'RoboBrowser':
+        """
+        async with RoboBrowser.acreate() as browser:
+            await browser.aopen(url)
+        """
+        session = session or aiohttp.ClientSession()
+        return cls(session=session, **kwargs)
 
     @property
     def state(self):
@@ -225,7 +241,7 @@ class RoboBrowser:
             await browser.aopen(url)
         """
         if self.session.closed:
-            raise Exception('session is already closed')
+            raise exceptions.SessionClosedError('session is already closed')
 
         async with getattr(self.session, method)(url, **self._build_send_args(**kwargs)) as resp:
             content = await resp.read()

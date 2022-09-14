@@ -32,8 +32,7 @@ class TestHeaders(unittest.TestCase):
 class TestAsyncHeaders(unittest.IsolatedAsyncioTestCase):
     @mock_links
     async def test_user_agent(self):
-        async with aiohttp.ClientSession() as client:
-            browser = RoboBrowser(session=client, user_agent='freddie')
+        async with RoboBrowser.acreate(user_agent='freddie') as browser:
             await browser.aopen('http://robobrowser.com/links/')
         assert_true('User-Agent' in browser.session.headers)
         assert_equal(
