@@ -11,3 +11,7 @@ class InvalidNameError(RoboError):
 
 class InvalidSubmitError(RoboError):
     pass
+
+
+class SessionClosedError(Exception):
+    pass

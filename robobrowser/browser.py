@@ -6,6 +6,7 @@ import re
 import os
 import base64
 import pickle
+
 import requests
 from bs4 import BeautifulSoup
 try:
@@ -34,7 +35,7 @@ class RoboState:
     def __init__(self, browser, response):
         self.browser = browser
         self.response = response
-        self.url = response.url
+        self.url = response.url if isinstance(response.url, str) else str(response.url)
 
     @cached_property
     def parsed(self):
@@ -74,9 +75,11 @@ class RoboBrowser:
                  history=True, timeout=None, allow_redirects=True, cache=False,
                  cache_patterns=None, max_age=None, max_count=None, tries=None,
                  send_referer=True,
-                 multiplier=None):
-
-        self.session = session or requests.Session()
+                 multiplier=None, asynchronously=False):
+        if session:
+            self.session = session
+        else:
+            self.session = RoboBrowser.create_async_session() if asynchronously else requests.Session()
 
         # Add default user agent string
         if user_agent is not None:
@@ -124,6 +127,27 @@ class RoboBrowser:
             return '<RoboBrowser url={0}>'.format(self.url)
         except exceptions.RoboError:
             return '<RoboBrowser>'
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.session.close()
+
+    @staticmethod
+    def create_async_session():
+        import aiohttp
+        return aiohttp.ClientSession()
+
+    @classmethod
+    def acreate(cls, session=None, **kwargs) -> 'RoboBrowser':
+        """
+        async with RoboBrowser.acreate() as browser:
+            await browser.aopen(url)
+        """
+        import aiohttp
+        session = session or aiohttp.ClientSession()
+        return cls(session=session, **kwargs)
 
     @property
     def state(self):
@@ -182,6 +206,9 @@ class RoboBrowser:
             url
         )
 
+    def set_proxy(self, proxies):
+        self.session.proxies = proxies
+
     @property
     def _default_send_args(self):
         """
@@ -213,6 +240,23 @@ class RoboBrowser:
         """
         response = self.session.request(method, url, **self._build_send_args(**kwargs))
         self._update_state(response)
+
+    async def aopen(self, url, method='get', encoding=None, **kwargs):
+        """Open a URL as asynchronously.
+        e.g
+        with aiohttp.ClientSession() as client:
+            browser = RoboBrowser(session=client)
+            await browser.aopen(url)
+        """
+        if self.session.closed:
+            raise exceptions.SessionClosedError('session is already closed')
+
+        async with getattr(self.session, method)(url, **self._build_send_args(**kwargs)) as resp:
+            content = await resp.read()
+            text = await resp.text(encoding)
+        resp.content = content
+        resp.text = text
+        self._update_state(resp)
 
     def _update_state(self, response):
         """Update the state of the browser. Create a new state object, and
@@ -518,3 +562,9 @@ class RoboBrowser:
             re.IGNORECASE)
         if match:
             return match.group(1).lower()
+
+    async def aclose(self):
+        try:
+            await self.session.close()
+        except TypeError:
+            pass

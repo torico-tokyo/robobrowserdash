@@ -1,15 +1,37 @@
-import mock
+import aiohttp
 import unittest
+from unittest import mock
 from nose.tools import *  # noqa
 
 import re
 import requests
 from bs4 import BeautifulSoup
 
-from robobrowser.browser import RoboBrowser
+from robobrowser.browser import RoboBrowser, RoboState
 from robobrowser import exceptions
 
 from tests.fixtures import mock_links, mock_urls, mock_forms
+
+
+class TestAsyncBrowser(unittest.IsolatedAsyncioTestCase):
+    async def test_create_session_manually(self):
+        with aiohttp.ClientSession() as session:
+            browser = RoboBrowser(session=session)
+            await browser.aopen('http://robobrowser.com/links/')
+            self.assertIsInstance(browser.state, RoboState)
+
+        await browser.aclose()
+
+    async def test_async_with(self):
+        async with RoboBrowser.acreate() as browser:
+            await browser.aopen('http://robobrowser.com/links/')
+            self.assertIsInstance(browser.state, RoboState)
+
+    async def test_pass_asynchronously(self):
+        browser = RoboBrowser(asynchronously=True)
+        await browser.aopen('http://robobrowser.com/links/')
+        self.assertIsInstance(browser.state, RoboState)
+        await browser.aclose()
 
 
 class TestHeaders(unittest.TestCase):
@@ -26,6 +48,17 @@ class TestHeaders(unittest.TestCase):
     def test_default_headers(self):
         browser = RoboBrowser()
         assert_equal(browser.session.headers, requests.Session().headers)
+
+
+class TestAsyncHeaders(unittest.IsolatedAsyncioTestCase):
+    @mock_links
+    async def test_user_agent(self):
+        async with RoboBrowser.acreate(user_agent='freddie') as browser:
+            await browser.aopen('http://robobrowser.com/links/')
+        assert_true('User-Agent' in browser.session.headers)
+        assert_equal(
+            browser.session.headers['User-Agent'], 'freddie'
+        )
 
 
 class TestOpen(unittest.TestCase):
@@ -80,6 +113,39 @@ class TestLinks(unittest.TestCase):
             exceptions.RoboError,
             lambda: self.browser.follow_link(link)
         )
+
+
+# class TestAsyncLinks(unittest.IsolatedAsyncioTestCase):
+#
+#     @mock_links
+#     async def asyncSetUp(self):
+#         async with aiohttp.ClientSession() as client:
+#             self.browser = RoboBrowser(session=client)
+#             await self.browser.aopen('http://robobrowser.com/links/')
+#
+#     @mock_links
+#     def test_get_link(self):
+#         link = self.browser.get_link()
+#         assert_equal(link.get('href'), '/link1/')
+#
+#     @mock_links
+#     async def test_get_links(self):
+#         links = self.browser.get_links()
+#         assert_equal(len(links), 3)
+#
+#     @mock_links
+#     async def test_follow_link_tag(self):
+#         link = self.browser.get_link(text=re.compile('sheer'))
+#         self.browser.follow_link(link)
+#         assert_equal(self.browser.url, 'http://robobrowser.com/link1/')
+#
+#     @mock_links
+#     async def test_follow_link_no_href(self):
+#         link = BeautifulSoup('<a>nohref</a>').find('a')
+#         assert_raises(
+#             exceptions.RoboError,
+#             lambda: self.browser.follow_link(link)
+#         )
 
 
 class TestForms(unittest.TestCase):
@@ -249,6 +315,54 @@ class TestHistory(unittest.TestCase):
         assert_raises(
             exceptions.RoboError,
             self.browser.forward
+        )
+
+    def test_back_error(self):
+        assert_raises(
+            exceptions.RoboError,
+            self.browser.back,
+            5
+        )
+
+
+class TestAsyncHistory(unittest.IsolatedAsyncioTestCase):
+
+    @mock_urls
+    async def asyncSetUp(self):
+        async with aiohttp.ClientSession() as client:
+            self.browser = RoboBrowser(session=client, history=True)
+            await self.browser.aopen('http://robobrowser.com/page1/')
+            await self.browser.aopen('http://robobrowser.com/page2/')
+            await self.browser.aopen('http://robobrowser.com/page3/')
+
+    def test_back(self):
+        self.browser.back()
+        assert_equal(
+            self.browser.url,
+            'http://robobrowser.com/page2/'
+        )
+
+    def test_back_n(self):
+        self.browser.back(n=2)
+        assert_equal(
+            self.browser.url,
+            'http://robobrowser.com/page1/'
+        )
+
+    def test_forward(self):
+        self.browser.back()
+        self.browser.forward()
+        assert_equal(
+            self.browser.url,
+            'http://robobrowser.com/page3/'
+        )
+
+    def test_forward_n(self):
+        self.browser.back(n=2)
+        self.browser.forward(n=2)
+        assert_equal(
+            self.browser.url,
+            'http://robobrowser.com/page3/'
         )
 
     def test_back_error(self):
