@@ -7,10 +7,31 @@ import re
 import requests
 from bs4 import BeautifulSoup
 
-from robobrowser.browser import RoboBrowser
+from robobrowser.browser import RoboBrowser, RoboState
 from robobrowser import exceptions
 
 from tests.fixtures import mock_links, mock_urls, mock_forms
+
+
+class TestAsyncBrowser(unittest.IsolatedAsyncioTestCase):
+    async def test_create_session_manually(self):
+        with aiohttp.ClientSession() as session:
+            browser = RoboBrowser(session=session)
+            await browser.aopen('http://robobrowser.com/links/')
+            self.assertIsInstance(browser.state, RoboState)
+
+        await browser.aclose()
+
+    async def test_async_with(self):
+        async with RoboBrowser.acreate() as browser:
+            await browser.aopen('http://robobrowser.com/links/')
+            self.assertIsInstance(browser.state, RoboState)
+
+    async def test_pass_asynchronously(self):
+        browser = RoboBrowser(asynchronously=True)
+        await browser.aopen('http://robobrowser.com/links/')
+        self.assertIsInstance(browser.state, RoboState)
+        await browser.aclose()
 
 
 class TestHeaders(unittest.TestCase):
